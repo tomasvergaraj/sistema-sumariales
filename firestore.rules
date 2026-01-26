@@ -1,0 +1,60 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    
+    // Helper functions
+    function isAuthenticated() {
+      return request.auth != null;
+    }
+    
+    function getUserRole() {
+      return get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role;
+    }
+    
+    function isAdmin() {
+      return isAuthenticated() && getUserRole() == 'admin';
+    }
+    
+    function isJuridica() {
+      return isAuthenticated() && getUserRole() == 'juridica';
+    }
+    
+    // Users collection - contiene los roles de usuarios
+    match /users/{userId} {
+      allow read: if isAuthenticated() && request.auth.uid == userId;
+      allow write: if false; // Solo administradores de Firebase Console pueden modificar
+    }
+    
+    // Procesos Sumariales collection
+    match /procesos_sumariales/{procesoId} {
+      // Lectura: todos los usuarios autenticados
+      allow read: if isAuthenticated();
+      
+      // Escritura: administradores pueden hacer cualquier cambio, juridica solo revision_juridica y updatedAt
+      allow create: if isAdmin();
+      allow update: if isAdmin() || (isJuridica() && 
+        request.resource.data.diff(resource.data).affectedKeys().hasAll(['revision_juridica']) &&
+        request.resource.data.diff(resource.data).affectedKeys().hasOnly(['revision_juridica', 'updatedAt'])
+      );
+      
+      // No se permite eliminar documentos (solo marcar como inactivo)
+      allow delete: if false;
+      
+      // Subcollection: ciclos_fiscal
+      match /ciclos_fiscal/{cicloId} {
+        allow read: if isAuthenticated();
+        allow create: if isAdmin();
+        allow update: if isAdmin();
+        allow delete: if false;
+      }
+      
+      // Subcollection: recusaciones
+      match /recusaciones/{recusacionId} {
+        allow read: if isAuthenticated();
+        allow create: if isAdmin();
+        allow update: if isAdmin();
+        allow delete: if false;
+      }
+    }
+  }
+}
