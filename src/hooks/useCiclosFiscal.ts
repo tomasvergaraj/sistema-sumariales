@@ -14,6 +14,7 @@ import {
 import { db } from '@/services/firebase';
 import { CicloFiscal, Prorroga, Ordinario, ProcesoSumarial, EtapaProceso } from '@/types';
 import { diferenciaDiasHabiles } from '@/utils/diasHabiles';
+import { validarFechaProrroga } from '@/hooks/usePlazos';
 
 export const useCiclosFiscal = (procesoId: string | undefined, onProcesoUpdated?: () => void) => {
   const [ciclos, setCiclos] = useState<CicloFiscal[]>([]);
@@ -138,16 +139,34 @@ export const useCiclosFiscal = (procesoId: string | undefined, onProcesoUpdated?
   const actualizarProrroga = useCallback(async (
     cicloId: string,
     tipoProrroga: 'prorroga_1' | 'prorroga_2',
-    data: { numero_resolucion: string; fecha_resolucion: Date }
+    data: { numero_resolucion: string; fecha_resolucion: Date; fecha_solicitud: Date }
   ) => {
     if (!procesoId || !cicloId) return;
 
     try {
-      
+      // Obtener el ciclo actual para validar la fecha
       const cicloRef = doc(db, 'procesos_sumariales', procesoId, 'ciclos_fiscal', cicloId);
+      const cicloSnap = await getDoc(cicloRef);
+
+      if (!cicloSnap.exists()) {
+        throw new Error('El ciclo fiscal no existe');
+      }
+
+      const cicloData = cicloSnap.data() as CicloFiscal;
+      const fechaNotificacion = cicloData.fecha_notificacion.toDate();
+
+      // Validar que la prórroga se solicitó dentro del plazo correspondiente
+      // - prorroga_1: días 0-20 hábiles desde notificación
+      // - prorroga_2: días 20-40 hábiles desde notificación (período de la primera prórroga)
+      const validacion = validarFechaProrroga(fechaNotificacion, data.fecha_solicitud, tipoProrroga);
+      if (!validacion.valido) {
+        throw new Error(validacion.mensaje);
+      }
+
       const prorrogaData: Prorroga = {
         numero_resolucion: data.numero_resolucion,
         fecha_resolucion: Timestamp.fromDate(data.fecha_resolucion),
+        fecha_solicitud: Timestamp.fromDate(data.fecha_solicitud),
       };
 
       await updateDoc(cicloRef, {
@@ -156,7 +175,7 @@ export const useCiclosFiscal = (procesoId: string | undefined, onProcesoUpdated?
 
       // Actualizar la etapa del proceso después de modificar la prórroga
       await actualizarEtapaProceso();
-      
+
       // Notificar que el proceso se actualizó
       if (onProcesoUpdated) {
         onProcesoUpdated();

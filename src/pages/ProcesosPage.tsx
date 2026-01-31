@@ -2,8 +2,14 @@ import { useState, useMemo, useEffect, useRef } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import { MainLayout } from '@/layouts/MainLayout';
 import { useProcesos } from '@/hooks/useProcesos';
+import { useCiclosFiscal } from '@/hooks/useCiclosFiscal';
 import { useAuthStore } from '@/context/authStore';
-import { formatearFecha } from '@/hooks/usePlazos';
+import {
+  formatearFecha,
+  calcularEstadoPlazoFiscal,
+  obtenerColorEstadoPlazoFiscal,
+  obtenerTextoEstadoPlazoFiscal
+} from '@/hooks/usePlazos';
 import { Plus, Search, Filter, Eye, Edit, Scale, CheckCircle, Clock } from 'lucide-react';
 import { ModalRevisionJuridica } from '@/components/ModalRevisionJuridica';
 import { NuevoProcesoModal } from '@/components/NuevoProcesoModal';
@@ -11,6 +17,27 @@ import { ProcesoEditarModal } from '@/components/ProcesoEditarModal';
 import { ProcesoDetalleModal } from '@/components/ProcesoDetalleModal';
 import { ProcesoSumarial, RevisionJuridica } from '@/types';
 import { Timestamp } from 'firebase/firestore';
+
+// Componente para mostrar el estado del plazo en cada fila
+const EstadoPlazoCell = ({ procesoId, procesoCerrado }: { procesoId: string; procesoCerrado: boolean }) => {
+  const { cicloActivo, loading } = useCiclosFiscal(procesoId);
+
+  if (loading) {
+    return <span className="text-gray-400 text-xs">...</span>;
+  }
+
+  if (!cicloActivo) {
+    return <span className="text-gray-400 text-xs">-</span>;
+  }
+
+  const estado = calcularEstadoPlazoFiscal(cicloActivo, procesoCerrado);
+
+  return (
+    <span className={`px-2 py-1 text-xs font-medium rounded-full ${obtenerColorEstadoPlazoFiscal(estado)}`}>
+      {obtenerTextoEstadoPlazoFiscal(estado)}
+    </span>
+  );
+};
 
 
 export const ProcesosPage = () => {
@@ -201,6 +228,9 @@ export const ProcesosPage = () => {
                     Etapa
                   </th>
                   <th className="px-6 py-3 text-left text-xs font-medium text-gray-700 uppercase tracking-wider">
+                    Estado Plazo
+                  </th>
+                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-700 uppercase tracking-wider">
                     Estado
                   </th>
                   <th className="px-6 py-3 text-left text-xs font-medium text-gray-700 uppercase tracking-wider">
@@ -231,6 +261,14 @@ export const ProcesosPage = () => {
                       >
                         {getEtapaLabel(proceso.etapa)}
                       </span>
+                    </td>
+                    <td className="px-6 py-4 whitespace-nowrap">
+                      {proceso.id && (
+                        <EstadoPlazoCell
+                          procesoId={proceso.id}
+                          procesoCerrado={proceso.etapa === 'CONCLUIDO'}
+                        />
+                      )}
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap">
                       <span

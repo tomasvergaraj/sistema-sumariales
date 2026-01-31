@@ -4,7 +4,10 @@ import {
   formatearFecha,
   calcularEstadoPlazo,
   obtenerColorEstadoPlazo,
-  obtenerTextoEstadoPlazo
+  obtenerTextoEstadoPlazo,
+  calcularEstadoPlazoFiscal,
+  obtenerColorEstadoPlazoFiscal,
+  obtenerTextoEstadoPlazoFiscal
 } from '@/hooks/usePlazos';
 import { diferenciaDiasHabiles } from '@/utils/diasHabiles';
 import { User, Calendar, Clock, AlertCircle, FileText, Plus, Check, X, Trash2, Edit, Send } from 'lucide-react';
@@ -30,7 +33,7 @@ interface HistorialFiscalProps {
   onActualizarProrroga?: (
     cicloId: string,
     tipoProrroga: 'prorroga_1' | 'prorroga_2',
-    data: { numero_resolucion: string; fecha_resolucion: Date }
+    data: { numero_resolucion: string; fecha_resolucion: Date; fecha_solicitud: Date }
   ) => Promise<void>;
   onEliminarProrroga?: (
     cicloId: string,
@@ -80,6 +83,7 @@ const PlazoItem = ({ label, inicio, termino, estadoForzado }: PlazoItemProps) =>
 interface ProrrogaFormData {
   numero_resolucion: string;
   fecha_resolucion: string;
+  fecha_solicitud: string;
 }
 
 interface OrdinarioFormData {
@@ -94,7 +98,7 @@ interface CicloFiscalCardProps {
   onActualizarProrroga?: (
     cicloId: string,
     tipoProrroga: 'prorroga_1' | 'prorroga_2',
-    data: { numero_resolucion: string; fecha_resolucion: Date }
+    data: { numero_resolucion: string; fecha_resolucion: Date; fecha_solicitud: Date }
   ) => Promise<void>;
   onEliminarProrroga?: (
     cicloId: string,
@@ -122,10 +126,12 @@ const CicloFiscalCard = ({ ciclo, esActivo, onActualizarProrroga, onEliminarPror
   const [prorroga1Form, setProrroga1Form] = useState<ProrrogaFormData>({
     numero_resolucion: ciclo.prorroga_1?.numero_resolucion || '',
     fecha_resolucion: ciclo.prorroga_1?.fecha_resolucion?.toDate().toISOString().split('T')[0] || '',
+    fecha_solicitud: ciclo.prorroga_1?.fecha_solicitud?.toDate().toISOString().split('T')[0] || '',
   });
   const [prorroga2Form, setProrroga2Form] = useState<ProrrogaFormData>({
     numero_resolucion: ciclo.prorroga_2?.numero_resolucion || '',
     fecha_resolucion: ciclo.prorroga_2?.fecha_resolucion?.toDate().toISOString().split('T')[0] || '',
+    fecha_solicitud: ciclo.prorroga_2?.fecha_solicitud?.toDate().toISOString().split('T')[0] || '',
   });
   const [ordinario20Form, setOrdinario20Form] = useState<OrdinarioFormData>({
     numero_ordinario: ciclo.ordinario_20?.numero_ordinario || '',
@@ -143,23 +149,27 @@ const CicloFiscalCard = ({ ciclo, esActivo, onActualizarProrroga, onEliminarPror
     fecha_notificacion: ciclo.ordinario_60?.fecha_notificacion?.toDate().toISOString().split('T')[0] || '',
   });
   const [guardando, setGuardando] = useState(false);
+  const [errorProrroga, setErrorProrroga] = useState<string | null>(null);
 
   const handleGuardarProrroga = async (tipo: 'prorroga_1' | 'prorroga_2') => {
     if (!ciclo.id || !onActualizarProrroga) return;
 
     const formData = tipo === 'prorroga_1' ? prorroga1Form : prorroga2Form;
-    if (!formData.numero_resolucion || !formData.fecha_resolucion) return;
+    if (!formData.numero_resolucion || !formData.fecha_resolucion || !formData.fecha_solicitud) return;
 
     setGuardando(true);
+    setErrorProrroga(null);
     try {
       await onActualizarProrroga(ciclo.id, tipo, {
         numero_resolucion: formData.numero_resolucion,
         fecha_resolucion: new Date(formData.fecha_resolucion),
+        fecha_solicitud: new Date(formData.fecha_solicitud),
       });
       if (tipo === 'prorroga_1') setEditandoProrroga1(false);
       else setEditandoProrroga2(false);
-    } catch (error) {
+    } catch (error: any) {
       console.error('Error al guardar prórroga:', error);
+      setErrorProrroga(error.message || 'Error al guardar la prórroga');
     } finally {
       setGuardando(false);
     }
@@ -256,11 +266,18 @@ const CicloFiscalCard = ({ ciclo, esActivo, onActualizarProrroga, onEliminarPror
             )}
           </div>
         </div>
-        {esActivo && (
-          <span className="px-3 py-1 bg-green-100 text-green-700 text-xs font-medium rounded-full">
-            Fiscal Actual
-          </span>
-        )}
+        <div className="flex flex-col items-end space-y-1">
+          {esActivo && (
+            <span className="px-3 py-1 bg-green-100 text-green-700 text-xs font-medium rounded-full">
+              Fiscal Actual
+            </span>
+          )}
+          {esActivo && (
+            <span className={`px-3 py-1 text-xs font-medium rounded-full ${obtenerColorEstadoPlazoFiscal(calcularEstadoPlazoFiscal(ciclo))}`}>
+              {obtenerTextoEstadoPlazoFiscal(calcularEstadoPlazoFiscal(ciclo))}
+            </span>
+          )}
+        </div>
       </div>
 
       {ciclo.motivo_cambio && (
@@ -376,7 +393,10 @@ const CicloFiscalCard = ({ ciclo, esActivo, onActualizarProrroga, onEliminarPror
               {ciclo.prorroga_1 && !editandoProrroga1 ? (
                 <div className="text-sm text-blue-700">
                   <p>Resolución: <span className="font-medium">{ciclo.prorroga_1.numero_resolucion}</span></p>
-                  <p>Fecha: <span className="font-medium">{formatearFecha(ciclo.prorroga_1.fecha_resolucion.toDate())}</span></p>
+                  {ciclo.prorroga_1.fecha_solicitud && (
+                    <p>Fecha Solicitud: <span className="font-medium">{formatearFecha(ciclo.prorroga_1.fecha_solicitud.toDate())}</span></p>
+                  )}
+                  <p>Fecha Resolución: <span className="font-medium">{formatearFecha(ciclo.prorroga_1.fecha_resolucion.toDate())}</span></p>
                   {editable && (
                     <div className="flex space-x-2 mt-1">
                       <button
@@ -405,12 +425,24 @@ const CicloFiscalCard = ({ ciclo, esActivo, onActualizarProrroga, onEliminarPror
                     placeholder="N° Resolución"
                     className="w-full px-3 py-1.5 text-sm border border-blue-200 rounded-lg focus:ring-2 focus:ring-blue-200 outline-none"
                   />
-                  <input
-                    type="date"
-                    value={prorroga1Form.fecha_resolucion}
-                    onChange={(e) => setProrroga1Form({ ...prorroga1Form, fecha_resolucion: e.target.value })}
-                    className="w-full px-3 py-1.5 text-sm border border-blue-200 rounded-lg focus:ring-2 focus:ring-blue-200 outline-none"
-                  />
+                  <div>
+                    <label className="text-xs text-gray-600">Fecha de Solicitud</label>
+                    <input
+                      type="date"
+                      value={prorroga1Form.fecha_solicitud}
+                      onChange={(e) => setProrroga1Form({ ...prorroga1Form, fecha_solicitud: e.target.value })}
+                      className="w-full px-3 py-1.5 text-sm border border-blue-200 rounded-lg focus:ring-2 focus:ring-blue-200 outline-none"
+                    />
+                  </div>
+                  <div>
+                    <label className="text-xs text-gray-600">Fecha de Resolución</label>
+                    <input
+                      type="date"
+                      value={prorroga1Form.fecha_resolucion}
+                      onChange={(e) => setProrroga1Form({ ...prorroga1Form, fecha_resolucion: e.target.value })}
+                      className="w-full px-3 py-1.5 text-sm border border-blue-200 rounded-lg focus:ring-2 focus:ring-blue-200 outline-none"
+                    />
+                  </div>
                   <div className="flex space-x-2">
                     <button
                       onClick={() => handleGuardarProrroga('prorroga_1')}
@@ -421,13 +453,16 @@ const CicloFiscalCard = ({ ciclo, esActivo, onActualizarProrroga, onEliminarPror
                       <span>Guardar</span>
                     </button>
                     <button
-                      onClick={() => setEditandoProrroga1(false)}
+                      onClick={() => { setEditandoProrroga1(false); setErrorProrroga(null); }}
                       className="flex items-center space-x-1 px-3 py-1 bg-gray-200 text-gray-700 text-xs rounded-lg hover:bg-gray-300"
                     >
                       <X size={12} />
                       <span>Cancelar</span>
                     </button>
                   </div>
+                  {errorProrroga && (
+                    <p className="text-xs text-red-600 mt-2">{errorProrroga}</p>
+                  )}
                 </div>
               ) : (
                 <p className="text-sm text-blue-600 italic">Sin prórroga registrada</p>
@@ -456,7 +491,10 @@ const CicloFiscalCard = ({ ciclo, esActivo, onActualizarProrroga, onEliminarPror
                 {ciclo.prorroga_2 && !editandoProrroga2 ? (
                   <div className="text-sm text-purple-700">
                     <p>Resolución: <span className="font-medium">{ciclo.prorroga_2.numero_resolucion}</span></p>
-                    <p>Fecha: <span className="font-medium">{formatearFecha(ciclo.prorroga_2.fecha_resolucion.toDate())}</span></p>
+                    {ciclo.prorroga_2.fecha_solicitud && (
+                      <p>Fecha Solicitud: <span className="font-medium">{formatearFecha(ciclo.prorroga_2.fecha_solicitud.toDate())}</span></p>
+                    )}
+                    <p>Fecha Resolución: <span className="font-medium">{formatearFecha(ciclo.prorroga_2.fecha_resolucion.toDate())}</span></p>
                     {editable && (
                       <div className="flex space-x-2 mt-1">
                         <button
@@ -485,12 +523,24 @@ const CicloFiscalCard = ({ ciclo, esActivo, onActualizarProrroga, onEliminarPror
                       placeholder="N° Resolución"
                       className="w-full px-3 py-1.5 text-sm border border-purple-200 rounded-lg focus:ring-2 focus:ring-purple-200 outline-none"
                     />
-                    <input
-                      type="date"
-                      value={prorroga2Form.fecha_resolucion}
-                      onChange={(e) => setProrroga2Form({ ...prorroga2Form, fecha_resolucion: e.target.value })}
-                      className="w-full px-3 py-1.5 text-sm border border-purple-200 rounded-lg focus:ring-2 focus:ring-purple-200 outline-none"
-                    />
+                    <div>
+                      <label className="text-xs text-gray-600">Fecha de Solicitud</label>
+                      <input
+                        type="date"
+                        value={prorroga2Form.fecha_solicitud}
+                        onChange={(e) => setProrroga2Form({ ...prorroga2Form, fecha_solicitud: e.target.value })}
+                        className="w-full px-3 py-1.5 text-sm border border-purple-200 rounded-lg focus:ring-2 focus:ring-purple-200 outline-none"
+                      />
+                    </div>
+                    <div>
+                      <label className="text-xs text-gray-600">Fecha de Resolución</label>
+                      <input
+                        type="date"
+                        value={prorroga2Form.fecha_resolucion}
+                        onChange={(e) => setProrroga2Form({ ...prorroga2Form, fecha_resolucion: e.target.value })}
+                        className="w-full px-3 py-1.5 text-sm border border-purple-200 rounded-lg focus:ring-2 focus:ring-purple-200 outline-none"
+                      />
+                    </div>
                     <div className="flex space-x-2">
                       <button
                         onClick={() => handleGuardarProrroga('prorroga_2')}
@@ -501,13 +551,16 @@ const CicloFiscalCard = ({ ciclo, esActivo, onActualizarProrroga, onEliminarPror
                         <span>Guardar</span>
                       </button>
                       <button
-                        onClick={() => setEditandoProrroga2(false)}
+                        onClick={() => { setEditandoProrroga2(false); setErrorProrroga(null); }}
                         className="flex items-center space-x-1 px-3 py-1 bg-gray-200 text-gray-700 text-xs rounded-lg hover:bg-gray-300"
                       >
                         <X size={12} />
                         <span>Cancelar</span>
                       </button>
                     </div>
+                    {errorProrroga && (
+                      <p className="text-xs text-red-600 mt-2">{errorProrroga}</p>
+                    )}
                   </div>
                 ) : (
                   <p className="text-sm text-purple-600 italic">Sin prórroga registrada</p>

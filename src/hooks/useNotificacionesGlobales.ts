@@ -10,29 +10,29 @@ export const useNotificacionesGlobales = () => {
   const plazo = useNotificacionesPlazoVencido();
 
   const notificaciones: NotificacionGlobal[] = useMemo(() => {
-    const revisiones = revision.notificaciones.map(n => ({
-      ...n,
+    const revisiones: NotificacionGlobal[] = revision.notificaciones.map(n => ({
+      id: n.id,
       tipo: 'revision' as const,
+      leida: n.leida,
+      fecha: n.fechaRevision,
+      procesoId: n.procesoId,
+      numeroResolucion: n.numeroResolucion,
+      tipoRevision: n.tipoRevision,
     }));
 
-    const plazos = plazo.notificaciones.map(n => ({
-      ...n,
+    const plazos: NotificacionGlobal[] = plazo.notificaciones.map(n => ({
+      id: n.id,
       tipo: 'plazo' as const,
+      leida: n.leida,
+      fecha: n.fechaVencimiento,
+      procesoId: n.procesoId,
+      nombreProceso: n.nombreProceso,
+      nombrePlazo: n.nombrePlazo,
     }));
 
-    return [...revisiones, ...plazos].sort((a, b) => {
-      const fechaA =
-        a.tipo === 'revision'
-          ? a.fechaRevision.getTime()
-          : a.fechaVencimiento.getTime();
-
-      const fechaB =
-        b.tipo === 'revision'
-          ? b.fechaRevision.getTime()
-          : b.fechaVencimiento.getTime();
-
-      return fechaB - fechaA;
-    });
+    return [...revisiones, ...plazos].sort(
+      (a, b) => b.fecha.getTime() - a.fecha.getTime()
+    );
   }, [revision.notificaciones, plazo.notificaciones]);
 
   const notificacionesNoLeidas = useMemo(

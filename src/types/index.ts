@@ -21,6 +21,7 @@ export interface Plazo {
 export interface Prorroga {
   numero_resolucion: string;
   fecha_resolucion: Timestamp;
+  fecha_solicitud: Timestamp; // Fecha en que el fiscal solicitó la prórroga (debe estar dentro de los 20 días)
 }
 
 export interface Ordinario {
@@ -102,6 +103,15 @@ export interface ProcesoSumarial {
 }
 
 export type EstadoPlazo = 'vigente' | 'por-vencer' | 'vencido';
+
+// Estados del plazo fiscal según lógica de negocio
+export type EstadoPlazoFiscal =
+  | 'VIGENTE'           // Dentro del plazo, sin vencer
+  | 'VENCIDO'           // Plazo vencido, sin ordinario enviado
+  | 'VENCIDO_NOTIFICADO' // Plazo vencido, ordinario enviado (20 días para regularizar)
+  | 'PRORROGADO'        // Prórroga aprobada y activa
+  | 'PRORROGA_VENCIDA'  // Prórroga venció sin solicitar siguiente prórroga
+  | 'CERRADO';          // Proceso concluido
 
 export interface DashboardStats {
   total_procesos: number;
