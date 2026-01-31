@@ -1,4 +1,4 @@
-import { useState, useMemo, useEffect } from 'react';
+import { useState, useMemo, useEffect, useRef } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import { MainLayout } from '@/layouts/MainLayout';
 import { useProcesos } from '@/hooks/useProcesos';
@@ -14,7 +14,16 @@ import { Timestamp } from 'firebase/firestore';
 
 
 export const ProcesosPage = () => {
-  const { procesos, loading, actualizarProceso } = useProcesos();
+  const { procesos, loading, actualizarProceso, actualizarEtapasAutomaticas } = useProcesos();
+  const etapasActualizadas = useRef(false);
+
+  // Actualizar etapas automáticamente cuando se carga la página
+  useEffect(() => {
+    if (!loading && procesos.length > 0 && !etapasActualizadas.current) {
+      etapasActualizadas.current = true;
+      actualizarEtapasAutomaticas();
+    }
+  }, [loading, procesos.length, actualizarEtapasAutomaticas]);
   const { user } = useAuthStore();
   const [searchParams, setSearchParams] = useSearchParams();
   const [searchTerm, setSearchTerm] = useState('');
@@ -198,9 +207,6 @@ export const ProcesosPage = () => {
                     Revisión Jurídica
                   </th>
                   <th className="px-6 py-3 text-left text-xs font-medium text-gray-700 uppercase tracking-wider">
-                    Envío Ordinario
-                  </th>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-700 uppercase tracking-wider">
                     Acciones
                   </th>
                 </tr>
@@ -249,21 +255,6 @@ export const ProcesosPage = () => {
                       ) : (
                         <span className="text-gray-400">-</span>
                       )}
-                    </td>
-                    <td className="px-6 py-4 whitespace-nowrap">
-                      <label className="relative inline-flex items-center cursor-pointer">
-                        <input
-                          type="checkbox"
-                          checked={proceso.envio_ordinario}
-                          onChange={async () => {
-                            if (proceso.id) {
-                              await actualizarProceso(proceso.id, { envio_ordinario: !proceso.envio_ordinario });
-                            }
-                          }}
-                          className="sr-only peer"
-                        />
-                        <div className="w-9 h-5 bg-gray-200 peer-focus:outline-none peer-focus:ring-2 peer-focus:ring-primary-200 rounded-full peer peer-checked:after:translate-x-full rtl:peer-checked:after:-translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:start-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:bg-blue-500"></div>
-                      </label>
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap text-sm">
                       <div className="flex space-x-2">

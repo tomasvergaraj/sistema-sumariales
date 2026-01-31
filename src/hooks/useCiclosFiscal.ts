@@ -12,7 +12,7 @@ import {
   where,
 } from 'firebase/firestore';
 import { db } from '@/services/firebase';
-import { CicloFiscal, Prorroga, ProcesoSumarial, EtapaProceso } from '@/types';
+import { CicloFiscal, Prorroga, Ordinario, ProcesoSumarial, EtapaProceso } from '@/types';
 import { diferenciaDiasHabiles } from '@/utils/diasHabiles';
 
 export const useCiclosFiscal = (procesoId: string | undefined, onProcesoUpdated?: () => void) => {
@@ -62,8 +62,11 @@ export const useCiclosFiscal = (procesoId: string | undefined, onProcesoUpdated?
       return 'INDAGATORIA_VIGENTE';
     }
 
+    // Normalizar fechas al inicio del día para evitar que la hora actual afecte el cálculo
     const hoy = new Date();
+    hoy.setHours(0, 0, 0, 0);
     const fechaNotificacion = cicloActivo.fecha_notificacion.toDate();
+    fechaNotificacion.setHours(0, 0, 0, 0);
 
     // Calcular días hábiles transcurridos desde la notificación
     const diasHabilesTranscurridos = diferenciaDiasHabiles(fechaNotificacion, hoy);
@@ -82,11 +85,11 @@ export const useCiclosFiscal = (procesoId: string | undefined, onProcesoUpdated?
       return 'INDAGATORIA_FUERA_PLAZO';
     }
 
-    if (diasHabilesTranscurridos >= 40 && !tieneProrroga2) {
+    if (diasHabilesTranscurridos > 40 && !tieneProrroga2) {
       return 'INDAGATORIA_FUERA_PLAZO';
     }
 
-    if (diasHabilesTranscurridos >= 20 && !tieneProrroga1) {
+    if (diasHabilesTranscurridos > 20 && !tieneProrroga1) {
       return 'INDAGATORIA_FUERA_PLAZO';
     }
 
@@ -193,6 +196,58 @@ export const useCiclosFiscal = (procesoId: string | undefined, onProcesoUpdated?
     }
   }, [procesoId, actualizarEtapaProceso, onProcesoUpdated]);
 
+  const actualizarOrdinario = useCallback(async (
+    cicloId: string,
+    tipoOrdinario: 'ordinario_20' | 'ordinario_40' | 'ordinario_60',
+    data: { numero_ordinario: string; fecha_ingreso: Date; fecha_notificacion?: Date | null }
+  ) => {
+    if (!procesoId || !cicloId) return;
+
+    try {
+      const cicloRef = doc(db, 'procesos_sumariales', procesoId, 'ciclos_fiscal', cicloId);
+      const ordinarioData: Ordinario = {
+        numero_ordinario: data.numero_ordinario,
+        fecha_ingreso: Timestamp.fromDate(data.fecha_ingreso),
+        fecha_notificacion: data.fecha_notificacion ? Timestamp.fromDate(data.fecha_notificacion) : null,
+      };
+
+      await updateDoc(cicloRef, {
+        [tipoOrdinario]: ordinarioData,
+      });
+
+      if (onProcesoUpdated) {
+        onProcesoUpdated();
+      }
+    } catch (err: any) {
+      console.error('Error al actualizar ordinario:', err);
+      setError(err.message);
+      throw err;
+    }
+  }, [procesoId, onProcesoUpdated]);
+
+  const eliminarOrdinario = useCallback(async (
+    cicloId: string,
+    tipoOrdinario: 'ordinario_20' | 'ordinario_40' | 'ordinario_60'
+  ) => {
+    if (!procesoId || !cicloId) return;
+
+    try {
+      const cicloRef = doc(db, 'procesos_sumariales', procesoId, 'ciclos_fiscal', cicloId);
+
+      await updateDoc(cicloRef, {
+        [tipoOrdinario]: null,
+      });
+
+      if (onProcesoUpdated) {
+        onProcesoUpdated();
+      }
+    } catch (err: any) {
+      console.error('Error al eliminar ordinario:', err);
+      setError(err.message);
+      throw err;
+    }
+  }, [procesoId, onProcesoUpdated]);
+
   return {
     ciclos,
     cicloActivo,
@@ -201,5 +256,7 @@ export const useCiclosFiscal = (procesoId: string | undefined, onProcesoUpdated?
     error,
     actualizarProrroga,
     eliminarProrroga,
+    actualizarOrdinario,
+    eliminarOrdinario,
   };
 };

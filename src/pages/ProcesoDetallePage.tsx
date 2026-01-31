@@ -1,21 +1,21 @@
 import { useParams, useNavigate } from 'react-router-dom';
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useMemo } from 'react';
 import { MainLayout } from '@/layouts/MainLayout';
 import { useProcesos } from '@/hooks/useProcesos';
 import { useCiclosFiscal } from '@/hooks/useCiclosFiscal';
 import { useAuthStore } from '@/context/authStore';
 import { formatearFecha } from '@/hooks/usePlazos';
-import { ArrowLeft, Calendar, User, FileText, CheckCircle, XCircle, Award, Scale } from 'lucide-react';
-import { ProcesoSumarial } from '@/types';
+import { ArrowLeft, Calendar, User, FileText, CheckCircle, XCircle, Award, Scale, Send } from 'lucide-react';
+import { ProcesoSumarial, EtapaProceso } from '@/types';
 import { HistorialFiscal } from '@/components/HistorialFiscal';
 
 export const ProcesoDetallePage = () => {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
-  const { procesos, forceRefresh } = useProcesos();
+  const { procesos, forceRefresh, determinarEtapaAutomatica } = useProcesos();
   const { user } = useAuthStore();
   const [proceso, setProceso] = useState<ProcesoSumarial | null>(null);
-  const { cicloActivo, ciclosAnteriores, loading: loadingCiclos, actualizarProrroga, eliminarProrroga } = useCiclosFiscal(id, forceRefresh);
+  const { cicloActivo, ciclosAnteriores, loading: loadingCiclos, actualizarProrroga, eliminarProrroga, actualizarOrdinario, eliminarOrdinario } = useCiclosFiscal(id, forceRefresh);
 
   useEffect(() => {
     if (id && procesos.length > 0) {
@@ -23,6 +23,12 @@ export const ProcesoDetallePage = () => {
       setProceso(foundProceso || null);
     }
   }, [id, procesos]);
+
+  // Calcular la etapa dinámicamente basándose en el ciclo activo actual
+  const etapaActual: EtapaProceso = useMemo(() => {
+    if (!proceso) return 'INDAGATORIA_VIGENTE';
+    return determinarEtapaAutomatica(proceso, cicloActivo);
+  }, [proceso, cicloActivo, determinarEtapaAutomatica]);
 
   if (!proceso) {
     return (
@@ -84,13 +90,13 @@ export const ProcesoDetallePage = () => {
           <div className="bg-white rounded-xl p-6 border border-primary-100 shadow-sm">
             <div className="flex items-center space-x-3">
               <div className={`p-2 rounded-lg ${
-                proceso.etapa === 'CONCLUIDO'
+                etapaActual === 'CONCLUIDO'
                   ? 'bg-purple-100'
                   : proceso.activo
                     ? 'bg-green-100'
                     : 'bg-gray-100'
               }`}>
-                {proceso.etapa === 'CONCLUIDO' ? (
+                {etapaActual === 'CONCLUIDO' ? (
                   <Award className="text-purple-600" size={24} />
                 ) : proceso.activo ? (
                   <CheckCircle className="text-green-600" size={24} />
@@ -101,7 +107,7 @@ export const ProcesoDetallePage = () => {
               <div>
                 <p className="text-sm text-gray-600">Estado</p>
                 <p className="font-semibold text-text">
-                  {proceso.etapa === 'CONCLUIDO' ? 'Concluido' : proceso.activo ? 'Activo' : 'Inactivo'}
+                  {etapaActual === 'CONCLUIDO' ? 'Concluido' : proceso.activo ? 'Activo' : 'Inactivo'}
                 </p>
               </div>
             </div>
@@ -114,24 +120,24 @@ export const ProcesoDetallePage = () => {
               </div>
               <div>
                 <p className="text-sm text-gray-600">Etapa</p>
-                <p className="font-semibold text-text">{getEtapaLabel(proceso.etapa)}</p>
+                <p className="font-semibold text-text">{getEtapaLabel(etapaActual)}</p>
               </div>
             </div>
           </div>
 
           <div className="bg-white rounded-xl p-6 border border-primary-100 shadow-sm">
             <div className="flex items-center space-x-3">
-              <div className={`p-2 rounded-lg ${proceso.envio_ordinario ? 'bg-green-100' : 'bg-yellow-100'}`}>
-                {proceso.envio_ordinario ? (
-                  <CheckCircle className="text-green-600" size={24} />
+              <div className={`p-2 rounded-lg ${proceso.por_cgr ? 'bg-red-100' : 'bg-gray-100'}`}>
+                {proceso.por_cgr ? (
+                  <CheckCircle className="text-red-600" size={24} />
                 ) : (
-                  <XCircle className="text-yellow-600" size={24} />
+                  <XCircle className="text-gray-500" size={24} />
                 )}
               </div>
               <div>
-                <p className="text-sm text-gray-600">Envío Ordinario</p>
+                <p className="text-sm text-gray-600">Por CGR</p>
                 <p className="font-semibold text-text">
-                  {proceso.envio_ordinario ? 'Enviado' : 'Pendiente'}
+                  {proceso.por_cgr ? 'Sí' : 'No'}
                 </p>
               </div>
             </div>
@@ -308,6 +314,101 @@ export const ProcesoDetallePage = () => {
           </div>
         )}
 
+        {/* Estado de Ordinarios */}
+        {cicloActivo && (cicloActivo.ordinario_20 || cicloActivo.ordinario_40 || cicloActivo.ordinario_60) && (
+          <div className="bg-white rounded-xl p-8 border border-orange-200 shadow-sm space-y-4">
+            <div className="flex items-center space-x-3">
+              <div className="p-2 bg-orange-100 rounded-lg">
+                <Send className="text-orange-600" size={24} />
+              </div>
+              <h3 className="text-lg font-semibold text-text">Estado de Ordinarios</h3>
+            </div>
+
+            <div className="space-y-4">
+              {cicloActivo.ordinario_20 && (
+                <div className="p-4 bg-orange-50 rounded-lg">
+                  <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+                    <div>
+                      <label className="block text-xs font-medium text-gray-600 mb-1">Plazo</label>
+                      <p className="text-sm font-medium text-orange-800">20 días</p>
+                    </div>
+                    <div>
+                      <label className="block text-xs font-medium text-gray-600 mb-1">N° Ordinario</label>
+                      <p className="text-sm font-medium text-text">{cicloActivo.ordinario_20.numero_ordinario}</p>
+                    </div>
+                    <div>
+                      <label className="block text-xs font-medium text-gray-600 mb-1">Enviado</label>
+                      <p className="text-sm font-medium text-green-600">Sí - {formatearFecha(cicloActivo.ordinario_20.fecha_ingreso.toDate())}</p>
+                    </div>
+                    <div>
+                      <label className="block text-xs font-medium text-gray-600 mb-1">Notificado</label>
+                      <p className={`text-sm font-medium ${cicloActivo.ordinario_20.fecha_notificacion ? 'text-green-600' : 'text-yellow-600'}`}>
+                        {cicloActivo.ordinario_20.fecha_notificacion
+                          ? `Sí - ${formatearFecha(cicloActivo.ordinario_20.fecha_notificacion.toDate())}`
+                          : 'Pendiente'}
+                      </p>
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              {cicloActivo.ordinario_40 && (
+                <div className="p-4 bg-amber-50 rounded-lg">
+                  <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+                    <div>
+                      <label className="block text-xs font-medium text-gray-600 mb-1">Plazo</label>
+                      <p className="text-sm font-medium text-amber-800">40 días</p>
+                    </div>
+                    <div>
+                      <label className="block text-xs font-medium text-gray-600 mb-1">N° Ordinario</label>
+                      <p className="text-sm font-medium text-text">{cicloActivo.ordinario_40.numero_ordinario}</p>
+                    </div>
+                    <div>
+                      <label className="block text-xs font-medium text-gray-600 mb-1">Enviado</label>
+                      <p className="text-sm font-medium text-green-600">Sí - {formatearFecha(cicloActivo.ordinario_40.fecha_ingreso.toDate())}</p>
+                    </div>
+                    <div>
+                      <label className="block text-xs font-medium text-gray-600 mb-1">Notificado</label>
+                      <p className={`text-sm font-medium ${cicloActivo.ordinario_40.fecha_notificacion ? 'text-green-600' : 'text-yellow-600'}`}>
+                        {cicloActivo.ordinario_40.fecha_notificacion
+                          ? `Sí - ${formatearFecha(cicloActivo.ordinario_40.fecha_notificacion.toDate())}`
+                          : 'Pendiente'}
+                      </p>
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              {cicloActivo.ordinario_60 && (
+                <div className="p-4 bg-red-50 rounded-lg">
+                  <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+                    <div>
+                      <label className="block text-xs font-medium text-gray-600 mb-1">Plazo</label>
+                      <p className="text-sm font-medium text-red-800">60 días</p>
+                    </div>
+                    <div>
+                      <label className="block text-xs font-medium text-gray-600 mb-1">N° Ordinario</label>
+                      <p className="text-sm font-medium text-text">{cicloActivo.ordinario_60.numero_ordinario}</p>
+                    </div>
+                    <div>
+                      <label className="block text-xs font-medium text-gray-600 mb-1">Enviado</label>
+                      <p className="text-sm font-medium text-green-600">Sí - {formatearFecha(cicloActivo.ordinario_60.fecha_ingreso.toDate())}</p>
+                    </div>
+                    <div>
+                      <label className="block text-xs font-medium text-gray-600 mb-1">Notificado</label>
+                      <p className={`text-sm font-medium ${cicloActivo.ordinario_60.fecha_notificacion ? 'text-green-600' : 'text-yellow-600'}`}>
+                        {cicloActivo.ordinario_60.fecha_notificacion
+                          ? `Sí - ${formatearFecha(cicloActivo.ordinario_60.fecha_notificacion.toDate())}`
+                          : 'Pendiente'}
+                      </p>
+                    </div>
+                  </div>
+                </div>
+              )}
+            </div>
+          </div>
+        )}
+
         {/* Historial de Fiscales */}
         <HistorialFiscal
           key={id} // Force re-render when process changes
@@ -316,6 +417,8 @@ export const ProcesoDetallePage = () => {
           loading={loadingCiclos}
           onActualizarProrroga={actualizarProrroga}
           onEliminarProrroga={eliminarProrroga}
+          onActualizarOrdinario={actualizarOrdinario}
+          onEliminarOrdinario={eliminarOrdinario}
           editable={user?.role === 'admin'}
         />
       </div>

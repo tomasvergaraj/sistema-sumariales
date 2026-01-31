@@ -1,4 +1,4 @@
-import { useMemo } from 'react';
+import { useMemo, useEffect, useRef } from 'react';
 import { MainLayout } from '@/layouts/MainLayout';
 import { useProcesos } from '@/hooks/useProcesos';
 import { calcularEstadoPlazo } from '@/hooks/usePlazos';
@@ -14,7 +14,16 @@ import { DashboardStats, EtapaProceso } from '@/types';
 import { ExportarDatos } from '@/components/ExportarDatos';
 
 export const DashboardPage = () => {
-  const { procesos, loading } = useProcesos();
+  const { procesos, loading, actualizarEtapasAutomaticas } = useProcesos();
+  const etapasActualizadas = useRef(false);
+
+  // Actualizar etapas automáticamente cuando se carga el dashboard
+  useEffect(() => {
+    if (!loading && procesos.length > 0 && !etapasActualizadas.current) {
+      etapasActualizadas.current = true;
+      actualizarEtapasAutomaticas();
+    }
+  }, [loading, procesos.length, actualizarEtapasAutomaticas]);
 
   const stats: DashboardStats = useMemo(() => {
     const total_procesos = procesos.length;

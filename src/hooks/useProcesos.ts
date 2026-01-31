@@ -220,8 +220,11 @@ export const useProcesos = () => {
       return 'INDAGATORIA_VIGENTE';
     }
 
+    // Normalizar fechas al inicio del día para evitar que la hora actual afecte el cálculo
     const hoy = new Date();
+    hoy.setHours(0, 0, 0, 0);
     const fechaNotificacion = cicloActivo.fecha_notificacion.toDate();
+    fechaNotificacion.setHours(0, 0, 0, 0);
 
     // Calcular días hábiles transcurridos desde la notificación
     const diasHabilesTranscurridos = diferenciaDiasHabiles(fechaNotificacion, hoy);
@@ -240,11 +243,11 @@ export const useProcesos = () => {
       return 'INDAGATORIA_FUERA_PLAZO';
     }
 
-    if (diasHabilesTranscurridos >= 40 && !tieneProrroga2) {
+    if (diasHabilesTranscurridos > 40 && !tieneProrroga2) {
       return 'INDAGATORIA_FUERA_PLAZO';
     }
 
-    if (diasHabilesTranscurridos >= 20 && !tieneProrroga1) {
+    if (diasHabilesTranscurridos > 20 && !tieneProrroga1) {
       return 'INDAGATORIA_FUERA_PLAZO';
     }
 

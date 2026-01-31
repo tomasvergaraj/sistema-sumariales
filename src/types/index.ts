@@ -23,6 +23,12 @@ export interface Prorroga {
   fecha_resolucion: Timestamp;
 }
 
+export interface Ordinario {
+  numero_ordinario: string;
+  fecha_ingreso: Timestamp;
+  fecha_notificacion?: Timestamp | null;
+}
+
 export type TipoResultado = 'medida_disciplinaria' | 'sobreseimiento' | 'absolucion' | null;
 
 export type TipoRevisionJuridica = 'reapertura' | 'acoge_propuesta_fiscal' | 'pendiente_de_revision' | null;
@@ -54,6 +60,9 @@ export interface CicloFiscal {
   plazos: Plazos;
   prorroga_1?: Prorroga | null;
   prorroga_2?: Prorroga | null;
+  ordinario_20?: Ordinario | null;
+  ordinario_40?: Ordinario | null;
+  ordinario_60?: Ordinario | null;
   activo: boolean;
   createdAt: Timestamp;
 }

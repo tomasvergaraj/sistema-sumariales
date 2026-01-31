@@ -3,12 +3,14 @@ import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
 import { useProcesos } from '@/hooks/useProcesos';
+import { useCiclosFiscal } from '@/hooks/useCiclosFiscal';
 import { Timestamp } from 'firebase/firestore';
-import { collection, query, where, getDocs } from 'firebase/firestore';
+import { collection, query, where, getDocs, doc, updateDoc } from 'firebase/firestore';
 import { db } from '@/services/firebase';
 import { X, Save, UserPlus } from 'lucide-react';
 import { ProcesoSumarial, EtapaProceso, CicloFiscal } from '@/types';
 import { useNotificationContext } from '@/context/NotificationContext';
+import { addDiasHabiles } from '@/utils/diasHabiles';
 
 const editarProcesoSchema = z.object({
   sirh: z.boolean(),
@@ -44,10 +46,12 @@ interface ProcesoEditarModalProps {
 
 export const ProcesoEditarModal = ({ isOpen, onClose, onSuccess, procesoId }: ProcesoEditarModalProps) => {
   const { procesos, actualizarProceso, cambiarFiscal, determinarEtapaAutomatica } = useProcesos();
+  const { cicloActivo } = useCiclosFiscal(procesoId);
   const { error: showError, warning: showWarning } = useNotificationContext();
   const [proceso, setProceso] = useState<ProcesoSumarial | null>(null);
   const [isLoading, setIsLoading] = useState(false);
   const [fiscalOriginal, setFiscalOriginal] = useState<string>('');
+  const [fechaNotificacionOriginal, setFechaNotificacionOriginal] = useState<string>('');
 
   const {
     register,
@@ -78,7 +82,11 @@ export const ProcesoEditarModal = ({ isOpen, onClose, onSuccess, procesoId }: Pr
         setValue('fecha_resolucion', foundProceso.fecha_resolucion.toDate().toISOString().split('T')[0]);
         setValue('por_cgr', foundProceso.por_cgr);
         setValue('detalle', foundProceso.detalle);
-        setValue('fecha_notificacion', foundProceso.fecha_notificacion.toDate().toISOString().split('T')[0]);
+        // Usar fecha de notificación del ciclo activo (fiscal actual) si existe
+        const fechaNotifCiclo = cicloActivo?.fecha_notificacion?.toDate().toISOString().split('T')[0];
+        const fechaNotif = fechaNotifCiclo || foundProceso.fecha_notificacion.toDate().toISOString().split('T')[0];
+        setValue('fecha_notificacion', fechaNotif);
+        setFechaNotificacionOriginal(fechaNotif);
         setValue('fiscal_nombre', foundProceso.fiscal_actual.nombre);
         setValue('fecha_asignacion_fiscal', new Date().toISOString().split('T')[0]);
         setValue('fecha_notificacion_fiscal', new Date().toISOString().split('T')[0]);
@@ -92,7 +100,7 @@ export const ProcesoEditarModal = ({ isOpen, onClose, onSuccess, procesoId }: Pr
         setValue('memo_entrega_direccion', foundProceso.memo_entrega_direccion || '');
       }
     }
-  }, [procesoId, procesos, setValue]);
+  }, [procesoId, procesos, setValue, cicloActivo]);
 
   const onSubmit = async (data: EditarProcesoFormData) => {
     if (!procesoId) return;
@@ -101,6 +109,7 @@ export const ProcesoEditarModal = ({ isOpen, onClose, onSuccess, procesoId }: Pr
       setIsLoading(true);
 
       const hayCambioFiscal = fiscalOriginal !== data.fiscal_nombre;
+      const hayCambioFechaNotificacion = fechaNotificacionOriginal !== data.fecha_notificacion;
 
       // Si hay cambio de fiscal, crear nuevo ciclo con sus plazos
       if (hayCambioFiscal) {
@@ -117,6 +126,29 @@ export const ProcesoEditarModal = ({ isOpen, onClose, onSuccess, procesoId }: Pr
           new Date(data.fecha_asignacion_fiscal),
           new Date(data.fecha_notificacion_fiscal)
         );
+      } else if (hayCambioFechaNotificacion && cicloActivo?.id) {
+        // Si cambió la fecha de notificación del fiscal actual, actualizar el ciclo activo
+        // Parsear fecha correctamente para evitar problemas de timezone
+        const [year, month, day] = data.fecha_notificacion.split('-').map(Number);
+        const nuevaFechaNotificacion = new Date(year, month - 1, day, 12, 0, 0);
+        const cicloRef = doc(db, 'procesos_sumariales', procesoId, 'ciclos_fiscal', cicloActivo.id);
+        await updateDoc(cicloRef, {
+          fecha_notificacion: Timestamp.fromDate(nuevaFechaNotificacion),
+          plazos: {
+            plazo_20: {
+              inicio: Timestamp.fromDate(nuevaFechaNotificacion),
+              termino: Timestamp.fromDate(addDiasHabiles(nuevaFechaNotificacion, 20)),
+            },
+            plazo_40: {
+              inicio: Timestamp.fromDate(addDiasHabiles(nuevaFechaNotificacion, 20)),
+              termino: Timestamp.fromDate(addDiasHabiles(nuevaFechaNotificacion, 40)),
+            },
+            plazo_60: {
+              inicio: Timestamp.fromDate(addDiasHabiles(nuevaFechaNotificacion, 40)),
+              termino: Timestamp.fromDate(addDiasHabiles(nuevaFechaNotificacion, 60)),
+            },
+          },
+        });
       }
 
       // Si hay resolución final, el proceso se marca como concluido e inactivo
@@ -259,13 +291,14 @@ export const ProcesoEditarModal = ({ isOpen, onClose, onSuccess, procesoId }: Pr
 
               <div>
                 <label className="block text-sm font-medium text-text mb-2">
-                  Fecha de Notificación *
+                  Fecha de Notificación (Fiscal Actual) *
                 </label>
                 <input
                   {...register('fecha_notificacion')}
                   type="date"
                   className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-200 focus:border-primary-200 outline-none"
                 />
+                <p className="mt-1 text-xs text-gray-500">Los plazos se recalcularán desde esta fecha</p>
                 {errors.fecha_notificacion && (
                   <p className="mt-1 text-sm text-red-600">{errors.fecha_notificacion.message}</p>
                 )}

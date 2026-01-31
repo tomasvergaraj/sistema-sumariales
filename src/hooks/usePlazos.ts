@@ -1,9 +1,11 @@
-import { differenceInDays } from 'date-fns';
+import { differenceInDays, startOfDay } from 'date-fns';
 import { EstadoPlazo } from '@/types';
 
 export const calcularEstadoPlazo = (fechaTermino: Date): EstadoPlazo => {
-  const hoy = new Date();
-  const diasRestantes = differenceInDays(fechaTermino, hoy);
+  // Normalizar ambas fechas a inicio del día para comparación correcta
+  const hoy = startOfDay(new Date());
+  const termino = startOfDay(new Date(fechaTermino));
+  const diasRestantes = differenceInDays(termino, hoy);
 
   if (diasRestantes < 0) {
     return 'vencido';
