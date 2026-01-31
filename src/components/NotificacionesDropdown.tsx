@@ -1,9 +1,9 @@
 import { useState, useRef, useEffect } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
-import { Bell, Check, CheckCheck, Scale, X } from 'lucide-react';
-import { useNotificacionesRevision, NotificacionRevision } from '@/hooks/useNotificacionesRevision';
-import { formatDistanceToNow } from 'date-fns';
-import { es } from 'date-fns/locale';
+import { Bell, CheckCheck, FileText, Clock, X } from 'lucide-react';
+import { useNotificacionesGlobales } from '@/hooks/useNotificacionesGlobales';
+import { NotificacionGlobal } from '@/types/notificaciones';
+
 
 export const NotificacionesDropdown = () => {
   const navigate = useNavigate();
@@ -17,7 +17,8 @@ export const NotificacionesDropdown = () => {
     loading,
     marcarComoLeida,
     marcarTodasComoLeidas,
-  } = useNotificacionesRevision();
+  } = useNotificacionesGlobales();
+  ;
 
   // Cerrar dropdown al hacer clic fuera
   useEffect(() => {
@@ -31,20 +32,15 @@ export const NotificacionesDropdown = () => {
     return () => document.removeEventListener('mousedown', handleClickOutside);
   }, []);
 
-  const handleNotificacionClick = (notificacion: NotificacionRevision) => {
-    marcarComoLeida(notificacion.id);
+  const handleNotificacionClick = (notificacion: NotificacionGlobal) => {
+    marcarComoLeida(notificacion.id, notificacion.tipo);
     setIsOpen(false);
-    // Navegar a /procesos con query param para abrir el modal
+
     if (location.pathname === '/procesos') {
-      // Ya estamos en /procesos, usar el evento de navegación para actualizar
       navigate(`/procesos?verProceso=${notificacion.procesoId}`, { replace: true });
     } else {
       navigate(`/procesos?verProceso=${notificacion.procesoId}`);
     }
-  };
-
-  const formatTiempoRelativo = (fecha: Date) => {
-    return formatDistanceToNow(fecha, { addSuffix: true, locale: es });
   };
 
   return (
@@ -69,8 +65,8 @@ export const NotificacionesDropdown = () => {
           {/* Header */}
           <div className="flex items-center justify-between px-4 py-3 bg-indigo-50 border-b border-indigo-100">
             <div className="flex items-center space-x-2">
-              <Scale className="text-indigo-600" size={18} />
-              <h3 className="font-semibold text-indigo-900">Revisiones Jurídicas</h3>
+              <Bell className="text-indigo-600" size={18} />
+              <h3 className="font-semibold text-indigo-900">Notificaciones</h3>
             </div>
             <div className="flex items-center space-x-2">
               {cantidadNoLeidas > 0 && (
@@ -114,36 +110,60 @@ export const NotificacionesDropdown = () => {
                       }`}
                     >
                       <div className="flex items-start space-x-3">
-                        <div className={`mt-1 p-1.5 rounded-lg ${
-                          !notificacion.leida ? 'bg-indigo-100' : 'bg-gray-100'
-                        }`}>
-                          <Scale size={14} className={
-                            !notificacion.leida ? 'text-indigo-600' : 'text-gray-500'
-                          } />
+                        <div
+                          className={`mt-1 p-1.5 rounded-lg ${
+                            notificacion.tipo === 'plazo'
+                              ? 'bg-red-100'
+                              : !notificacion.leida
+                              ? 'bg-indigo-100'
+                              : 'bg-gray-100'
+                          }`}
+                        >
+                          {notificacion.tipo === 'revision' ? (
+                            <FileText
+                              size={14}
+                              className={!notificacion.leida ? 'text-indigo-600' : 'text-gray-500'}
+                            />
+                          ) : (
+                            <Clock
+                              size={14}
+                              className="text-red-600"
+                            />
+                          )}
                         </div>
                         <div className="flex-1 min-w-0">
                           <div className="flex items-center justify-between">
                             <p className={`text-sm font-medium truncate ${
                               !notificacion.leida ? 'text-indigo-900' : 'text-gray-900'
                             }`}>
-                              Resolución {notificacion.numeroResolucion}
+                              {notificacion.tipo === 'revision'
+                                ? `Resolución ${notificacion.numeroResolucion}`
+                                : 'Plazo vencido'}
                             </p>
-                            {!notificacion.leida && (
-                              <span className="ml-2 w-2 h-2 bg-indigo-500 rounded-full flex-shrink-0"></span>
+                          </div>
+                          <div className="text-sm text-gray-600 mt-0.5">
+                            {notificacion.tipo === 'revision' ? (
+                              notificacion.tipoRevision
+                            ) : (
+                              <>
+                                <span className="font-medium text-red-600">
+                                  Plazo vencido:
+                                </span>{' '}
+                                {notificacion.nombrePlazo}
+                              </>
+                            )}
+
+                            {notificacion.tipo === 'plazo' && (
+                              <div className="text-xs text-gray-400 mt-1">
+                                Proceso: {notificacion.nombreProceso}
+                              </div>
                             )}
                           </div>
-                          <p className="text-sm text-gray-600 mt-0.5">
-                            {notificacion.tipoRevision}
-                            {notificacion.numeroMemo && (
-                              <span className="text-gray-400"> - {notificacion.numeroMemo}</span>
-                            )}
-                          </p>
-                          <p className="text-xs text-gray-400 mt-1">
-                            {formatTiempoRelativo(notificacion.fechaRevision)}
-                          </p>
                         </div>
-                        {notificacion.leida && (
-                          <Check size={14} className="text-green-500 mt-1 flex-shrink-0" />
+                        {notificacion.tipo === 'revision' ? (
+                          <FileText size={14} className="text-indigo-400" />
+                        ) : (
+                          <Clock size={14} className="text-red-400" />
                         )}
                       </div>
                     </button>
@@ -157,7 +177,7 @@ export const NotificacionesDropdown = () => {
           {notificaciones.length > 0 && (
             <div className="px-4 py-2 bg-gray-50 border-t border-gray-100">
               <p className="text-xs text-gray-500 text-center">
-                Mostrando revisiones de las últimas 48 horas
+                Mostrando notificaciones recientes
               </p>
             </div>
           )}
