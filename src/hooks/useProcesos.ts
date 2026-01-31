@@ -13,7 +13,7 @@ import {
 } from 'firebase/firestore';
 import { db } from '@/services/firebase';
 import { ProcesoSumarial, CicloFiscal, EtapaProceso } from '@/types';
-import { addDiasHabiles, diferenciaDiasHabiles } from '@/utils/diasHabiles';
+import { addDiasHabiles } from '@/utils/diasHabiles';
 
 export const useProcesos = () => {
   const [procesos, setProcesos] = useState<ProcesoSumarial[]>([]);
@@ -209,51 +209,73 @@ export const useProcesos = () => {
     }
   };
 
-  const determinarEtapaAutomatica = (proceso: ProcesoSumarial, cicloActivo?: CicloFiscal): EtapaProceso => {
-    // Si hay resolución final, está concluido
+  const determinarEtapaAutomatica = (
+    proceso: ProcesoSumarial,
+    cicloActivo?: CicloFiscal
+  ): EtapaProceso => {
+
     if (proceso.resolucion_final) {
       return 'CONCLUIDO';
     }
 
-    // Si no hay ciclo activo o no hay fecha de notificación, por defecto indagatoria vigente
     if (!cicloActivo || !cicloActivo.fecha_notificacion) {
       return 'INDAGATORIA_VIGENTE';
     }
 
-    // Normalizar fechas al inicio del día para evitar que la hora actual afecte el cálculo
     const hoy = new Date();
     hoy.setHours(0, 0, 0, 0);
-    const fechaNotificacion = cicloActivo.fecha_notificacion.toDate();
-    fechaNotificacion.setHours(0, 0, 0, 0);
 
-    // Calcular días hábiles transcurridos desde la notificación
-    const diasHabilesTranscurridos = diferenciaDiasHabiles(fechaNotificacion, hoy);
+    const termino20 = cicloActivo.plazos.plazo_20?.termino?.toDate();
+    const termino40 = cicloActivo.plazos.plazo_40?.termino?.toDate();
+    const termino60 = cicloActivo.plazos.plazo_60?.termino?.toDate();
 
-    // Verificar prórrogas y plazos
-    const tieneProrroga1 = cicloActivo.prorroga_1 !== null && cicloActivo.prorroga_1 !== undefined;
-    const tieneProrroga2 = cicloActivo.prorroga_2 !== null && cicloActivo.prorroga_2 !== undefined;
+    if (!termino20) {
+      return 'INDAGATORIA_VIGENTE';
+}
 
-    // Lógica de plazos con prórrogas:
-    // - 0-20 días hábiles: siempre vigente (plazo inicial)
-    // - 20-40 días hábiles: vigente solo con prórroga 1
-    // - 40-60 días hábiles: vigente solo con prórroga 2
-    // - >60 días hábiles: siempre fuera de plazo
+    termino20.setHours(0, 0, 0, 0);
+    termino40?.setHours(0, 0, 0, 0);
+    termino60?.setHours(0, 0, 0, 0);
 
-    if (diasHabilesTranscurridos > 60) {
+    const tieneProrroga1 = !!cicloActivo.prorroga_1;
+    const tieneProrroga2 = !!cicloActivo.prorroga_2;
+
+    /**
+     * SIN PRÓRROGAS
+     * plazo máximo: 20 días
+     */
+    if (!tieneProrroga1 && hoy > termino20) {
       return 'INDAGATORIA_FUERA_PLAZO';
     }
 
-    if (diasHabilesTranscurridos > 40 && !tieneProrroga2) {
+    /**
+     * SOLO PRÓRROGA 1
+     * plazo máximo: 40 días
+     */
+    if (
+      tieneProrroga1 &&
+      !tieneProrroga2 &&
+      termino40 &&
+      hoy > termino40
+    ) {
       return 'INDAGATORIA_FUERA_PLAZO';
     }
 
-    if (diasHabilesTranscurridos > 20 && !tieneProrroga1) {
+    /**
+     * PRÓRROGA 1 + 2
+     * plazo máximo: 60 días
+     */
+    if (
+      tieneProrroga2 &&
+      termino60 &&
+      hoy > termino60
+    ) {
       return 'INDAGATORIA_FUERA_PLAZO';
     }
 
-    // Si está dentro de los plazos con las prórrogas correspondientes, está vigente
     return 'INDAGATORIA_VIGENTE';
   };
+
 
   return {
     procesos,
